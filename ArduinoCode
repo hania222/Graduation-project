@@ -1,0 +1,124 @@
+// arduino_robot.ino
+// Simplified version - just listens for serial commands
+
+// --- Pin Definitions ---
+#define ENA 4
+#define ENB 5
+#define IN1 7
+#define IN2 6
+#define IN3 8
+#define IN4 9
+
+// --- Movement duration (ms) ---
+#define MOVE_DURATION 1000  // How long to move for each command
+
+void setup() {
+    pinMode(IN1, OUTPUT);
+    pinMode(IN2, OUTPUT);
+    pinMode(IN3, OUTPUT);
+    pinMode(IN4, OUTPUT);
+    pinMode(ENA, OUTPUT);
+    pinMode(ENB, OUTPUT);
+
+    Serial.begin(9600);
+
+    // Set motor speed
+    analogWrite(ENA, 200);
+    analogWrite(ENB, 200);
+
+    stopCar();
+    
+    // Signal ready
+    Serial.println("READY");
+}
+
+void loop() {
+    if (Serial.available() > 0) {
+        char cmd = Serial.read();
+        
+        switch (cmd) {
+            case 'F':
+                Serial.println("ACK:FORWARD");
+                goForward();
+                delay(MOVE_DURATION);
+                stopCar();
+                Serial.println("DONE:FORWARD");
+                break;
+                
+            case 'B':
+                Serial.println("ACK:BACKWARD");
+                goBackward();
+                delay(MOVE_DURATION);
+                stopCar();
+                Serial.println("DONE:BACKWARD");
+                break;
+                
+            case 'L':
+                Serial.println("ACK:LEFT");
+                turnLeft();
+                delay(MOVE_DURATION);
+                stopCar();
+                Serial.println("DONE:LEFT");
+                break;
+                
+            case 'R':
+                Serial.println("ACK:RIGHT");
+                turnRight();
+                delay(MOVE_DURATION);
+                stopCar();
+                Serial.println("DONE:RIGHT");
+                break;
+                
+            case 'S':
+                Serial.println("ACK:STOP");
+                stopCar();
+                Serial.println("DONE:STOP");
+                break;
+                
+            case 'P':  // Ping - for connection test
+                Serial.println("PONG");
+                break;
+                
+            default:
+                Serial.print("UNKNOWN:");
+                Serial.println(cmd);
+                break;
+        }
+    }
+}
+
+// --- Motor Control ---
+void stopCar() {
+    digitalWrite(IN1, LOW);
+    digitalWrite(IN2, LOW);
+    digitalWrite(IN3, LOW);
+    digitalWrite(IN4, LOW);
+}
+
+void goForward() {
+    digitalWrite(IN1, HIGH);
+    digitalWrite(IN2, LOW);
+    digitalWrite(IN3, HIGH);
+    digitalWrite(IN4, LOW);
+}
+
+void goBackward() {
+    digitalWrite(IN1, LOW);
+    digitalWrite(IN2, HIGH);
+    digitalWrite(IN3, LOW);
+    digitalWrite(IN4, HIGH);
+}
+
+void turnRight() {
+    digitalWrite(IN1, HIGH);
+    digitalWrite(IN2, LOW);
+    digitalWrite(IN3, LOW);
+    digitalWrite(IN4, HIGH);
+}
+
+void turnLeft() {
+    digitalWrite(IN1, LOW);
+    digitalWrite(IN2, HIGH);
+    digitalWrite(IN3, HIGH);
+    digitalWrite(IN4, LOW);
+}
