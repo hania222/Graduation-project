@@ -2,7 +2,7 @@
 robot_controller.py
 - Runs on Raspberry Pi
 - Uses camera for YOLO object detection and QR code scanning
-- Publishes status and events to MQTT broker
+- Publishes status and logs to MQTT broker
 - Subscribes to task assignments from backend
 - Controls Arduino robot via Serial
 
@@ -14,17 +14,17 @@ python robot_controller.py
 """
 
 import time
-import threading
+import threading                #allows multiple threads of execution(camera, detection, MQTT, etc.)
 import cv2
-from picamera2 import Picamera2
+from picamera2 import Picamera2 #Raspberry Pi Camera v3 driver
 from ultralytics import YOLO
 from pyzbar.pyzbar import decode
 import paho.mqtt.client as mqtt
 import json
-import random
+import random                   #for battery simulation
 from datetime import datetime
-import serial
-import serial.tools.list_ports
+import serial 
+import serial.tools.list_ports #auto detect USB ports
 
 # Configuration
 # ===============================
@@ -45,7 +45,7 @@ TOPIC_TASKS = "warehouse/tasks"
 
 # Task Action to Movement Mapping
 ACTION_MOVEMENT_MAP = {
-    "Pick": "R",      # Pick -> Turn Right
+    "Pick": "R",      #task Pick -> Turn Right (bu arduino)
     "Place": "L",     # Place -> Turn Left
     "Scan": "F",      # Scan -> Forward
     "Move": "B"       # Move -> Backward
@@ -54,14 +54,14 @@ ACTION_MOVEMENT_MAP = {
 # ===============================
 # Global State
 # ===============================
-latest_frame = None
-annotated_display = None
+latest_frame = None      #most recent captured frame
+annotated_display = None #frame with annotations for display
 stop_flag = False
-frame_lock = threading.Lock()
+frame_lock = threading.Lock() #prevents 2 threads from touching the same image at once
 
 current_task = None
 task_lock = threading.Lock()
-qr_processed = set()
+qr_processed = set() #to avoid duplicate QR processing
 
 robot_state = {
     "status": "idle",
@@ -219,22 +219,24 @@ def execute_movement(action):
     
     return success
 
+model = YOLO("rtdetr-l.pt")
 
 # ===============================
 # Camera & YOLO Setup
 # ===============================
 print("[INIT] Loading YOLO model...")
-model = YOLO("yolov8n.pt")
+model = YOLO("yolo11n.pt") 
 print("[INIT] YOLO model loaded")
 
 print("[INIT] Starting camera...")
 cam = Picamera2()
 config = cam.create_preview_configuration(
-    main={"format": "RGB888", "size": (640, 480)}
+    main={"format": "RGB888", "size": (960, 720)} 
 )
 cam.configure(config)
-cam.start()
+cam.start() #begin camera capture
 print("[INIT] Camera started")
+
 
 # ===============================
 # MQTT Setup
@@ -252,7 +254,7 @@ def on_connect(client, userdata, flags, rc):
         print(f"[MQTT] Connection failed with code {rc}")
 
 
-def on_message(client, userdata, msg):
+def on_message(client, userdata, msg): #triggered when a message is arrived
     """Callback when message received"""
     global current_task
     
@@ -266,7 +268,7 @@ def on_message(client, userdata, msg):
             container_id = data.get("container_id")
             
             with task_lock:
-                current_task = data
+                current_task = data #store current task
                 robot_state["current_task_id"] = task_id
                 robot_state["status"] = "busy"
             
@@ -468,8 +470,13 @@ def run_detection():
             frame = latest_frame.copy()
         
         try:
+           #after capturing, add contrast normalization
+            frame = cv2.cvtColor(frame, cv2.COLOR_RGB2BGR)
+            frame = cv2.convertScaleAbs(frame, alpha=1.2, beta=10)  #alpha-->contrast & beta-->brightness
+            frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB) 
+
             # YOLO Object Detection
-            results = model(frame, verbose=False)
+            results = model(frame, verbose=False, imgsz=640, conf=0.3, iou=0.5, verbose=False)
             annotated = results[0].plot()
             
             # QR Code Detection
