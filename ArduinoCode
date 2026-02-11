@@ -1,124 +1,113 @@
-// arduino_robot.ino
-// Simplified version - just listens for serial commands
+// PIN DEFINITIONS
 
-// --- Pin Definitions ---
-#define ENA 4
-#define ENB 5
+// IR Sensors (2 sensors)
+#define IR_LEFT   A0
+#define IR_RIGHT  A1
+
+// L298N Motor Driver
+#define ENA 5
+#define ENB 6
 #define IN1 7
-#define IN2 6
-#define IN3 8
-#define IN4 9
+#define IN2 8
+#define IN3 9
+#define IN4 10
 
-// --- Movement duration (ms) ---
-#define MOVE_DURATION 1000  // How long to move for each command
+// Red LED
+#define RED_LED 13
+
+// Motor Speeds
+#define BASE_SPEED 120
+#define TURN_SPEED 90
+
+
 
 void setup() {
-    pinMode(IN1, OUTPUT);
-    pinMode(IN2, OUTPUT);
-    pinMode(IN3, OUTPUT);
-    pinMode(IN4, OUTPUT);
-    pinMode(ENA, OUTPUT);
-    pinMode(ENB, OUTPUT);
+  pinMode(IR_LEFT, INPUT);
+  pinMode(IR_RIGHT, INPUT);
 
-    Serial.begin(9600);
+  pinMode(ENA, OUTPUT);
+  pinMode(ENB, OUTPUT);
+  pinMode(IN1, OUTPUT);
+  pinMode(IN2, OUTPUT);
+  pinMode(IN3, OUTPUT);
+  pinMode(IN4, OUTPUT);
 
-    // Set motor speed
-    analogWrite(ENA, 200);
-    analogWrite(ENB, 200);
+  pinMode(RED_LED, OUTPUT);
+  digitalWrite(RED_LED, LOW);
 
-    stopCar();
-    
-    // Signal ready
-    Serial.println("READY");
+  Serial.begin(9600);
+  Serial.println("2-Sensor Line Follower (BLACK = 0)");
 }
 
 void loop() {
-    if (Serial.available() > 0) {
-        char cmd = Serial.read();
-        
-        switch (cmd) {
-            case 'F':
-                Serial.println("ACK:FORWARD");
-                goForward();
-                delay(MOVE_DURATION);
-                stopCar();
-                Serial.println("DONE:FORWARD");
-                break;
-                
-            case 'B':
-                Serial.println("ACK:BACKWARD");
-                goBackward();
-                delay(MOVE_DURATION);
-                stopCar();
-                Serial.println("DONE:BACKWARD");
-                break;
-                
-            case 'L':
-                Serial.println("ACK:LEFT");
-                turnLeft();
-                delay(MOVE_DURATION);
-                stopCar();
-                Serial.println("DONE:LEFT");
-                break;
-                
-            case 'R':
-                Serial.println("ACK:RIGHT");
-                turnRight();
-                delay(MOVE_DURATION);
-                stopCar();
-                Serial.println("DONE:RIGHT");
-                break;
-                
-            case 'S':
-                Serial.println("ACK:STOP");
-                stopCar();
-                Serial.println("DONE:STOP");
-                break;
-                
-            case 'P':  // Ping - for connection test
-                Serial.println("PONG");
-                break;
-                
-            default:
-                Serial.print("UNKNOWN:");
-                Serial.println(cmd);
-                break;
-        }
-    }
+  int left  = digitalRead(IR_LEFT);
+  int right = digitalRead(IR_RIGHT);
+
+  // ---- for SERIAL DEBUG ----
+  Serial.print("L: ");
+  Serial.print(left);
+  Serial.print("  R: ");
+  Serial.println(right);
+
+  // STOP CONDITION (BOTH BLACK) 
+  if (left == 0 && right == 0) {
+    stopMotors();
+    digitalWrite(RED_LED, HIGH);
+    Serial.println("STOP ZONE DETECTED");
+    delay(50);
+    return;
+  }
+
+  digitalWrite(RED_LED, LOW);
+
+  // LINE FOLLOWING 
+  if (left == 1 && right == 1) {
+    forward();           // centered
+  }
+  else if (left == 0 && right == 1) {
+    turnLeft();
+  }
+  else if (right == 0 && left == 1) {
+    turnRight();
+  }
+  else {
+    stopMotors();        // safety fallback
+  }
 }
 
-// --- Motor Control ---
-void stopCar() {
-    digitalWrite(IN1, LOW);
-    digitalWrite(IN2, LOW);
-    digitalWrite(IN3, LOW);
-    digitalWrite(IN4, LOW);
-}
+// --- MOTOR FUNCTIONS----
 
-void goForward() {
-    digitalWrite(IN1, HIGH);
-    digitalWrite(IN2, LOW);
-    digitalWrite(IN3, HIGH);
-    digitalWrite(IN4, LOW);
-}
+void forward() {
+  analogWrite(ENA, BASE_SPEED);
+  analogWrite(ENB, BASE_SPEED);
 
-void goBackward() {
-    digitalWrite(IN1, LOW);
-    digitalWrite(IN2, HIGH);
-    digitalWrite(IN3, LOW);
-    digitalWrite(IN4, HIGH);
-}
-
-void turnRight() {
-    digitalWrite(IN1, HIGH);
-    digitalWrite(IN2, LOW);
-    digitalWrite(IN3, LOW);
-    digitalWrite(IN4, HIGH);
+  digitalWrite(IN1, HIGH);
+  digitalWrite(IN2, LOW);
+  digitalWrite(IN3, HIGH);
+  digitalWrite(IN4, LOW);
 }
 
 void turnLeft() {
-    digitalWrite(IN1, LOW);
-    digitalWrite(IN2, HIGH);
-    digitalWrite(IN3, HIGH);
-    digitalWrite(IN4, LOW);
+  analogWrite(ENA, TURN_SPEED);
+  analogWrite(ENB, BASE_SPEED);
+
+  digitalWrite(IN1, LOW);
+  digitalWrite(IN2, HIGH);
+  digitalWrite(IN3, HIGH);
+  digitalWrite(IN4, LOW);
+}
+
+void turnRight() {
+  analogWrite(ENA, BASE_SPEED);
+  analogWrite(ENB, TURN_SPEED);
+
+  digitalWrite(IN1, HIGH);
+  digitalWrite(IN2, LOW);
+  digitalWrite(IN3, LOW);
+  digitalWrite(IN4, HIGH);
+}
+
+void stopMotors() {
+  analogWrite(ENA, 0);
+  analogWrite(ENB, 0);
 }
