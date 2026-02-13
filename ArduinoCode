@@ -1,28 +1,33 @@
-// PIN DEFINITIONS
+// ================= PIN DEFINITIONS =================
 
-// IR Sensors (2 sensors)
+// IR Sensors
 #define IR_LEFT   A0
+#define IR_CENTER A2
 #define IR_RIGHT  A1
 
 // L298N Motor Driver
-#define ENA 5
-#define ENB 6
-#define IN1 7
-#define IN2 8
-#define IN3 9
-#define IN4 10
+#define ENA 4
+#define ENB 5
+#define IN1 6
+#define IN2 7
+#define IN3 8
+#define IN4 9
 
 // Red LED
 #define RED_LED 13
 
 // Motor Speeds
-#define BASE_SPEED 120
-#define TURN_SPEED 90
+#define BASE_SPEED 40
+#define TURN_SPEED 15
 
+// ================= GLOBALS =================
+bool line_follow_enabled = false;
+String cmd = "";
 
-
+// ================= SETUP =================
 void setup() {
   pinMode(IR_LEFT, INPUT);
+  pinMode(IR_CENTER, INPUT);
   pinMode(IR_RIGHT, INPUT);
 
   pinMode(ENA, OUTPUT);
@@ -36,78 +41,118 @@ void setup() {
   digitalWrite(RED_LED, LOW);
 
   Serial.begin(9600);
-  Serial.println("2-Sensor Line Follower (BLACK = 0)");
+  Serial.println("ARDUINO_READY");
 }
 
+// ================= LOOP =================
 void loop() {
-  int left  = digitalRead(IR_LEFT);
-  int right = digitalRead(IR_RIGHT);
+  // --- Read Serial Commands ---
+  while (Serial.available()) {
+    char c = Serial.read();
+    if (c == '\n') {
+      processCommand(cmd);
+      cmd = "";
+    } else {
+      cmd += c;
+    }
+  }
 
-  // ---- for SERIAL DEBUG ----
-  Serial.print("L: ");
-  Serial.print(left);
-  Serial.print("  R: ");
-  Serial.println(right);
+  // --- Execute Line Following only if enabled ---
+  if (line_follow_enabled) {
+    lineFollow();
+  }
+}
 
-  // STOP CONDITION (BOTH BLACK) 
-  if (left == 0 && right == 0) {
+// ================= COMMAND HANDLER =================
+void processCommand(String c) {
+  c.trim();
+
+  if (c == "LF") {
+    line_follow_enabled = true;
+  }
+  else if (c == "S") {
+    line_follow_enabled = false;
     stopMotors();
+  }
+  else if (c == "ALIGN") {
+    alignRobot();
+  }
+  else if (c == "LED_ON") {
     digitalWrite(RED_LED, HIGH);
-    Serial.println("STOP ZONE DETECTED");
-    delay(50);
+  }
+  else if (c == "LED_OFF") {
+    digitalWrite(RED_LED, LOW);
+  }
+}
+
+// ================= LINE FOLLOW =================
+void lineFollow() {
+  int L = digitalRead(IR_LEFT);
+  int C = digitalRead(IR_CENTER);
+  int R = digitalRead(IR_RIGHT);
+
+  // STOP ZONE (wide black)
+  if (L && C && R) {
+    stopMotors();
+    Serial.println("WIDE_BLACK");
+    line_follow_enabled = false;
+    delay(100);
     return;
   }
 
-  digitalWrite(RED_LED, LOW);
-
-  // LINE FOLLOWING 
-  if (left == 1 && right == 1) {
-    forward();           // centered
-  }
-  else if (left == 0 && right == 1) {
-    turnLeft();
-  }
-  else if (right == 0 && left == 1) {
-    turnRight();
-  }
-  else {
-    stopMotors();        // safety fallback
-  }
+  if (C && !L && !R) forward();
+  else if (L && !R) turnLeft();
+  else if (R && !L) turnRight();
+  else stopMotors();
 }
 
-// --- MOTOR FUNCTIONS----
+// ================= ALIGNMENT =================
+void alignRobot() {
+  unsigned long start = millis();
 
+  while (millis() - start < 2500) {
+    int L = digitalRead(IR_LEFT);
+    int C = digitalRead(IR_CENTER);
+    int R = digitalRead(IR_RIGHT);
+
+    if (C && !L && !R) {
+      stopMotors();
+      Serial.println("ALIGN_OK");
+      return;
+    }
+    else if (L) turnLeft();
+    else if (R) turnRight();
+  }
+
+  stopMotors();
+  Serial.println("ALIGN_OK");
+}
+
+// ================= MOTOR FUNCTIONS =================
 void forward() {
   analogWrite(ENA, BASE_SPEED);
   analogWrite(ENB, BASE_SPEED);
-
-  digitalWrite(IN1, HIGH);
-  digitalWrite(IN2, LOW);
-  digitalWrite(IN3, HIGH);
-  digitalWrite(IN4, LOW);
+  digitalWrite(IN1, HIGH); digitalWrite(IN2, LOW);
+  digitalWrite(IN3, HIGH); digitalWrite(IN4, LOW);
 }
 
 void turnLeft() {
   analogWrite(ENA, TURN_SPEED);
   analogWrite(ENB, BASE_SPEED);
-
-  digitalWrite(IN1, LOW);
-  digitalWrite(IN2, HIGH);
-  digitalWrite(IN3, HIGH);
-  digitalWrite(IN4, LOW);
+  digitalWrite(IN1, LOW); digitalWrite(IN2, HIGH);
+  digitalWrite(IN3, HIGH); digitalWrite(IN4, LOW);
 }
 
 void turnRight() {
   analogWrite(ENA, BASE_SPEED);
   analogWrite(ENB, TURN_SPEED);
-
-  digitalWrite(IN1, HIGH);
-  digitalWrite(IN2, LOW);
-  digitalWrite(IN3, LOW);
-  digitalWrite(IN4, HIGH);
+  digitalWrite(IN1, HIGH); digitalWrite(IN2, LOW);
+  digitalWrite(IN3, LOW); digitalWrite(IN4, HIGH);
 }
 
 void stopMotors() {
   analogWrite(ENA, 0);
   analogWrite(ENB, 0);
+  digitalWrite(IN1, LOW); digitalWrite(IN2, LOW);
+  digitalWrite(IN3, LOW); digitalWrite(IN4, LOW);
 }
